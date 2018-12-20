@@ -38,6 +38,26 @@ function testLocalVariable(){
             '    return x + 1 + 1;\n' +
             '}'
         );
+        assert.deepEqual(
+            getSub(parseCode('function f(x) {let a;a=x+1;return a;}'),'3'),
+            'function f(x) {\n' +
+            '    return x + 1;\n' +
+            '}'
+        );
+        assert.deepEqual(
+            getSub(parseCode('function f(x,y) {x=y+2;let a=x+1;return a;}'),'3,4'),
+            'function f(x, y) {\n' +
+            '    x = y + 2;\n' +
+            '    return x + 1;\n' +
+            '}'
+        );
+        assert.deepEqual(
+            getSub(parseCode('function f(x,y) {x[0]=y+2;let a=[1,2,3];a[0]=x[0];return a;}'),'[3,2],4'),
+            'function f(x, y) {\n' +
+            '    x[0] = y + 2;\n'+
+            '    return [\n        x[0],\n        2,\n        3\n    ];\n' +
+            '}'
+        );
 
     });
 }
@@ -58,6 +78,23 @@ function testIfStatements() {
             '    } else {\n' +
             '        return x + y + z + (0 + z + 5);\n' +
             '    }\n' + '}'
+        );
+        assert.deepEqual(
+            getSub(parseCode('function f(x,y) {x[0]=y+2;let a=[1,2,3];a[0]=x[0];if (!(a[0] < y)) {return y;}}'),'[3,2],4'),
+            'function f(x, y) {\n' +
+            '    x[0] = y + 2;\n'+
+            '    if (!(x[0] < y)) {\n'+
+            '        return y;\n' +
+            '    }\n'+
+            '}'
+        );
+        assert.deepEqual(
+            getSub(parseCode('function f(x,y) {let a=[1,2,3];a[0]=x[0];if (x.length < y) {return a;}}'),'[3,2],4'),
+            'function f(x, y) {\n' +
+            '    if (x.length < y) {\n'+
+            '        return [\n            x[0],\n            2,\n            3\n        ];\n' +
+            '    }\n'+
+            '}'
         );
 
     });

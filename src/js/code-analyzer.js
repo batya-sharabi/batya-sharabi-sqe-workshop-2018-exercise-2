@@ -19,26 +19,14 @@ export {parseCode,itercode};
 export {revertCode};
 
 const itercode = (parsedCode,params) => {
-    let parse=parseCode(params);
-    if (params!=null)
-        if(parse.body[0].expression.expressions!=null){
-            Input=parse.body[0].expression.expressions;
-        }
-        else Input[0]=parse.body[0].expression.expressions;
-    for (let i=0 ; i<parsedCode.body.length; i++){
-        if(parsedCode.body[i].type=='FunctionDeclaration')
-            continue;
-        parsedCode.body[i]=loopItercode(parsedCode.body[i]);
-        if(parsedCode.body[i]==null) delete parsedCode.body[i];
-    }
+    initParams(params);
+    parsedCode=initGlobal(parsedCode);
     let body = [];
     for (let i = 0; i < parsedCode.body.length; i++){
         if (parsedCode.body[i]!=null) body.push(parsedCode.body[i]);
     }
     parsedCode.body=body;
     for (let i=0 ; i<parsedCode.body.length; i++){
-        if(parsedCode.body[i].type!='FunctionDeclaration')
-            continue;
         parsedCode.body[i]=loopItercode(parsedCode.body[i]);
     }
     let toReturn=new Array(2);
@@ -46,6 +34,23 @@ const itercode = (parsedCode,params) => {
     toReturn[1]=araayColors;
     return toReturn;
 };
+function initParams(params) {
+    let parse=parseCode(params);
+    if(parse.body[0].expression.expressions!=null){
+        Input=parse.body[0].expression.expressions;
+    }
+    else Input[0]=parse.body[0].expression.expressions;
+}
+
+function initGlobal(parsedCode) {
+    for (let i=0 ; i<parsedCode.body.length; i++){
+        if(parsedCode.body[i].type=='FunctionDeclaration')
+            continue;
+        parsedCode.body[i]=loopItercode(parsedCode.body[i]);
+        delete parsedCode.body[i];
+    }
+    return parsedCode;
+}
 
 function loopItercode(codeJsonBody){
     if((codeJsonBody.type == 'Literal') ||(codeJsonBody.type == 'updateExpression'))
@@ -55,7 +60,6 @@ function loopItercode(codeJsonBody){
 }
 const loopFunction = {
     Identifier: identifier,
-    //UpdateExpression: updateExpression,
     ArrayExpression: arrayExpression,
     BlockStatement: blockStatement,
     ExpressionStatement: expressionStatement,
@@ -84,6 +88,7 @@ function variableDeclaration(codeJsonBody){
             codeJsonBody.declarations[i].init = loopItercode(codeJsonBody.declarations[i].init);
             args[codeJsonBody.declarations[i].id.name]=codeJsonBody.declarations[i].init;
         }
+        else args[codeJsonBody.declarations[i].id.name]=null;
     }
     return null;
 }
@@ -107,16 +112,19 @@ function assignmentExpression(codeJsonBody) {
             return codeJsonBody;
         }
     }
-    else if(codeJsonBody.left.type=='MemberExpression') {
-        codeJsonBody.left.property=loopItercode(codeJsonBody.left.property);
-        if(codeJsonBody.left.object.name in args)
-            args[codeJsonBody.left.object.name].elements[codeJsonBody.left.property]=codeJsonBody.right;
-        else{
-            valueArgument[codeJsonBody.left.object.name].elements[codeJsonBody.left.property.raw]=codeJsonBody.right;
-            return codeJsonBody;
-        }
-    }
+    else
+        return memberInAssignment(codeJsonBody);
     return null;
+}
+
+function memberInAssignment(codeJsonBody) {
+    codeJsonBody.left.property=loopItercode(codeJsonBody.left.property);
+    if(codeJsonBody.left.object.name in args)
+        args[codeJsonBody.left.object.name].elements[codeJsonBody.left.property.raw]=codeJsonBody.right;
+    else{
+        valueArgument[codeJsonBody.left.object.name].elements[codeJsonBody.left.property.raw]=codeJsonBody.right;
+        return codeJsonBody;
+    }
 }
 
 function arrayExpression(codeJsonBody) {
@@ -168,19 +176,10 @@ function alternate(codeJsonBody){
 
 function memberExpression(codeJsonBody) {
     codeJsonBody.property=loopItercode(codeJsonBody.property);
+    if(codeJsonBody.object.name in args)
+        return args[codeJsonBody.object.name].elements[codeJsonBody.property.raw];
     return codeJsonBody;
 }
-
-/*function updateExpression(codeJsonBody) {
-    if(codeJsonBody.argument.name in args){
-        args[codeJsonBody.argument.name]=args[codeJsonBody.argument.name]+1;
-    }
-    else if(codeJsonBody.argument.name in valueArgument){
-        valueArgument[codeJsonBody.argument.name]=valueArgument[codeJsonBody.argument.name]+1;
-        return codeJsonBody;
-    }
-
-}*/
 
 function unaryExpression(codeJsonBody){
     codeJsonBody.argument=loopItercode(codeJsonBody.argument);
@@ -201,11 +200,7 @@ function blockStatement(codeJsonBody,rows) {
         codeJsonBody.body[i]=loopItercode(codeJsonBody.body[i], rows);
         if(codeJsonBody.body[i]==null) delete codeJsonBody.body[i];
     }
-    let body = [];
-    for (let i = 0; i < codeJsonBody.body.length; i++){
-        if (codeJsonBody.body[i]!=null) body.push(codeJsonBody.body[i]);
-    }
-    codeJsonBody.body=body;
+    codeJsonBody=deleteNullLines(codeJsonBody);
     args = {};
     for(let obj in oldArgs){
         args[obj]=oldArgs[obj];
@@ -213,13 +208,26 @@ function blockStatement(codeJsonBody,rows) {
     return codeJsonBody;
 }
 
+function deleteNullLines(codeJsonBody) {
+    let body = [];
+    for (let i = 0; i < codeJsonBody.body.length; i++){
+        if (codeJsonBody.body[i]!=null) body.push(codeJsonBody.body[i]);
+    }
+    codeJsonBody.body=body;
+    return codeJsonBody;
+}
 function colorLines(jsonTest) {
     let test=revertCode(jsonTest);
     let splitTest=test.split(' ');
     splitTest=replaceValue(splitTest);
-    test=splitTest.join(' ');
-    splitTest=test.split(' ');
-    splitTest=replaceValue(splitTest);
+    if(!test.includes('.')){
+        test=splitTest.join(' ');
+        splitTest=test.split(' ');
+        splitTest=replaceValue(splitTest);
+        test=splitTest.join(' ');
+        splitTest=test.split(' ');
+        splitTest=replaceValue(splitTest);
+    }
     test=splitTest.join(' ');
     let ifGreen=eval(test);
     if(ifGreen==true){
@@ -239,17 +247,22 @@ function replaceValue(splitTest) {
         else if(splitTest[i] in valueArgument){
             splitTest[i]=revertCode(valueArgument[splitTest[i]]);
         }
-        else if(splitTest[i].indexOf('[') !== -1 && splitTest[i].substring(0,splitTest[i].indexOf('[')) in valueArgument){
-            let argument=splitTest[i].substring(0,splitTest[i].indexOf('['));
-            let property=splitTest[i].substring(splitTest[i].indexOf('[')+1,splitTest[i].indexOf(']'));
-            splitTest[i]=revertCode(valueArgument[argument].elements[property]);
-        }
-        else if(splitTest[i].includes('.')){
-            let argument=splitTest[i].substring(0,splitTest[i].indexOf('.'));
-            let property=splitTest[i].substring(splitTest[i].indexOf('.')+1);
-            if(!argument.includes('['))
-                splitTest[i]=revertCode(valueArgument[argument])+'.'+property;
-        }
+        else
+            splitTest[i]=replaceMember(splitTest[i]);
+    }
+    return splitTest;
+}
+
+function replaceMember(splitTest) {
+    if(splitTest.indexOf('[') !== -1 && splitTest.substring(0,splitTest.indexOf('[')) in valueArgument){
+        let argument=splitTest.substring(0,splitTest.indexOf('['));
+        let property=splitTest.substring(splitTest.indexOf('[')+1,splitTest.indexOf(']'));
+        splitTest=revertCode(valueArgument[argument].elements[property]);
+    }
+    else if(splitTest.includes('.')){
+        let argument=splitTest.substring(0,splitTest.indexOf('.'));
+        let property=splitTest.substring(splitTest.indexOf('.')+1);
+        splitTest=revertCode(valueArgument[argument])+'.'+property;
     }
     return splitTest;
 }
